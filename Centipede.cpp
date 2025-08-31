@@ -3,9 +3,31 @@
 #include <SFML/System.hpp>
 #include <SFML/Graphics.hpp>
 #include <SFML/Audio.hpp>
+#include <vector>
+#include <fstream>
+#include <sstream>
 
 using namespace std;
 using namespace sf;
+
+// Player Struct
+struct Player
+{
+	string name;
+	int level, score, lives;
+
+	static int size;
+
+	Player(string n = "", int l = 1, int sc = 0, int lv = 3)
+	{
+		name = n;
+		level = l;
+		score = sc;
+		lives = lv;
+	}
+};
+
+int Player::size = 0;
 
 // Initializing Dimensions.
 // resolutionX and resolutionY determine the rendering resolution.
@@ -52,6 +74,7 @@ int centipede_length = 12;
 //                                                                         //
 /////////////////////////////////////////////////////////////////////////////
 
+void updateCSV(string filename, vector<Player*> players);
 void cleararrays(float player[], float bullet[], int mushrooms[][4], int& minmushrooms, const int indexnum, const int numvariable, float**& centipede, bool domushroom = 0, bool docentipede = 1, bool doplayer = 0);
 void initializePCM(float player[], float bullet[], int mushrooms[][4], int& minmushrooms, int& nummushrooms, int& totalmushrooms, const int indexnum, const int numvariable, const int head, float** centipede, Sprite& mushroomSprite1, Sprite& mushroomSprite2, Sprite& poisonousmushroomSprite1, Sprite& poisonousmushroomSprite2, bool domushroom = 0, bool docentipede = 1, bool doplayer = 0);
 void drawPlayer(sf::RenderWindow &window, float player[], sf::Sprite &playerSprite);	//Spawns player sprite at current location 
@@ -75,11 +98,24 @@ void drawCentipede(RenderWindow &window, float** centipede, const int head, Spri
 void movecentipede(RenderWindow& window, Sprite& centipedeleftSprite, Sprite& centipederightSprite, Sprite& centipedeheadleftSprite, Sprite& centipedeheadrightSprite, float** centipede, float player[], int mushrooms[][4], const int head, int totalmushrooms, bool playercollide, float& centipede_speed, int*& Up, int*& Down, int*& Left, int*& Right, bool& deductlife);	//Moves centipede (Moves centipede while checking wall, mushroom, player collision)
 void destroycentipede(float bullet[], float** centipede, const int head,  int mushrooms[][4], int &nummushrooms, int &totalmushrooms, int &score, Sound& kill_sound);	//Destroys a centipede segment and spawns a mushroom (This will detect mushroom-bullet detection, destroys centipede part, spawn mushroom and increases score)
 void lives_draw(RenderWindow& window, int lives, Text lives_text, Sprite& heartSprite);
+void parseCSV(vector<Player>& players, string filename);
+void sortplayers(vector<Player*>& vec);
+void displayHighscores(vector<Player*> players, Text& index, Text& name, Text& level, Text& score, vector<Text> headings, RenderWindow& window);
+void copyFile(const string& sourcePath, const string& destPath);
+
+//Animations:
+void draw_shipexplosion(RenderWindow& window, Sprite* sprites, Clock& clock, int& cycles, int& total, int x, int y);
+
+
 
 int main()
 {
 	srand(time(0));
 	string name;	// Max Length = 16
+	string filename = "scores.csv", copyfilename = "scores_copy.csv";
+	vector <Player> players;
+	vector <Player*> sortedplayers;
+
 	int maxnamelen = 16,
 		score = 0,	// Player score
 		lives = 3,	// Player lives
@@ -89,22 +125,24 @@ int main()
 		extrawindow = 270,		//Increasing it will increase the black space
 		extrasetwindow = 177,	//Increasing it will increase the size of whole window
 		menu_pt = 1,
-		setting_pt = 1,
+		setting_pt = 5,
 		pause_pt = 1,
-		sound_vol = 30,	//Sound volume
-		music_vol = 25,	//Music volume
+		themes_pt = 3,
+		sound_vol = 50,	//Sound volume
+		music_vol = 20,	//Music volume
 		recgap,
 		selectcol = 0x2b,	//Colors
 		defcol = 0xe0;
 	float centipede_speed = 0.4, playerspeed = 1, bullet_speed = 4;	//Speed of centipede (+- x-axis)
-	bool playercollide = 0,
-		game_over = 0,
-		game_won = 0,
-		sound_bool = 1,
-		music_bool = 1,
-		isMainmenu = 1,
-		deductlife = 0,
-		exit_pt = 0;
+	bool playercollide = false,
+		game_over = false,
+		game_won = false,
+		sound_bool = true,
+		music_bool = true,
+		isMainmenu = true,
+		deductlife = false,
+		exit_pt = false,
+		gamestarted = false;
 
 	int* Up = new int[centipede_length], * Down = new int[centipede_length], * Left = new int[centipede_length], * Right = new int[centipede_length];
 
@@ -121,6 +159,8 @@ int main()
 	Window 8: Pause screen
 	Window 9: End screen
 	Window 10: Exit Ask screen
+	Window 11: Clearing Heap
+	Window 12: Themes
 	*/
 
 	// Declaring RenderWindow.
@@ -132,7 +172,53 @@ int main()
 	// window.setSize(sf::Vector2u(1920, 1920)); // Recommended for 3840x2160 (4k) displays.
 
 	// Used to position your window on every launch. Use according to your needs.
-	window.setPosition(sf::Vector2i(70, 0));
+	window.setPosition(sf::Vector2i(470, 220));
+
+	//--------------------ANIMATION--------------------//
+	//												   //
+	//												   //
+
+	Texture shipex_tex;
+	shipex_tex.loadFromFile("Textures/spaceship_explosion.png");
+	int shipex_total = 7,
+		shipex_rows = 1,
+		shipex_cols = 7,
+		shipex_height = 48,
+		shipex_width = 336,
+		shipex_xfactor = shipex_height / shipex_rows,
+		shipex_yfactor = shipex_width / shipex_cols,
+		shipex_cycles = shipex_total,
+		shipex_n = 0;
+	float shipex_scale = 1.3;
+	Clock shipex_clock;
+	Sprite* shipex_sprites = new Sprite[shipex_total];
+
+	for (int i = 0; i < shipex_rows; ++i)
+	{
+		for (int j = 0; j < shipex_cols; ++j)
+		{
+			if (shipex_n == shipex_total)
+				break;
+
+			shipex_sprites[shipex_n].setTextureRect(IntRect(j * shipex_xfactor, i * shipex_yfactor, shipex_xfactor, shipex_yfactor));
+			shipex_sprites[shipex_n].setTexture(shipex_tex);
+			shipex_sprites[shipex_n].setScale(shipex_scale, shipex_scale);
+			++shipex_n;
+		}
+		if (shipex_n == shipex_total)
+			break;
+	}
+
+
+
+
+	//------------------FILE Reading------------------//
+	//												  //
+	//												  //
+
+	parseCSV(players, filename);
+	for (int i = 0; i < players.size(); ++i)
+		sortedplayers.push_back(&players[i]);
 
 	//------------------Initializing TEXTS------------------//
 	//														//
@@ -147,6 +233,13 @@ int main()
 	small_text.setFont(font);
 	small_text.setCharacterSize(22);
 	small_text.setFillColor(Color(0xe0, 0xe0, 0xe0));
+
+	// Credits Text
+	Text credits = small_text;
+	credits.setString("Developed by Moiz Ansari");
+	credits.setCharacterSize(30);
+	credits.setFillColor(Color(212, 212, 212));
+	credits.setPosition(530, 900);
 
 	//Initailizing score text.
 	Text score_text = small_text;
@@ -267,8 +360,8 @@ int main()
 	Text menu_text2 = menu_text;
 	menu_text2.setFillColor(Color(selectcol, selectcol, selectcol));
 
-	int m_posy = 300,
-		gap = 115,
+	int m_posy = 265,
+		gap = 94,
 		m_text_pos = 3;
 
 	//----- Menu -----
@@ -309,9 +402,21 @@ int main()
 	settings1.setPosition(set_posx + m_text_pos, set_posy + m_text_pos);
 	settings2.setPosition(set_posx, set_posy);
 
+	//----- Themes -----
+	int th_posx = 464,
+		th_posy = m_posy + gap * 2;
+	Text themes = menu_text;
+	themes.setString("Themes");
+	themes.setPosition(th_posx, th_posy);
+	Text themes1 = menu_text1, themes2 = menu_text2;
+	themes1.setString("Themes");
+	themes2.setString("Themes");
+	themes1.setPosition(th_posx + m_text_pos, th_posy + m_text_pos);
+	themes2.setPosition(th_posx, th_posy);
+
 	//----- Instructions -----
 	int instruc_posx = 319,
-		instruc_posy = m_posy + gap * 2;
+		instruc_posy = m_posy + gap * 3;
 	Text instructions = menu_text;
 	instructions.setString("Instructions");
 	instructions.setPosition(instruc_posx, instruc_posy);
@@ -324,7 +429,7 @@ int main()
 
 	//----- Controls -----
 	int ctrls_posx = 419,
-		ctrls_posy = m_posy + gap * 3;
+		ctrls_posy = m_posy + gap * 4;
 	Text controls = menu_text;
 	controls.setString("Controls");
 	controls.setPosition(ctrls_posx, ctrls_posy);
@@ -337,7 +442,7 @@ int main()
 
 	//----- High scores -----
 	int hsc_posx = 358,
-		hsc_posy = m_posy + gap * 4;
+		hsc_posy = m_posy + gap * 5;
 	Text high_scores = menu_text;
 	high_scores.setString("High Scores");
 	high_scores.setPosition(hsc_posx, hsc_posy);
@@ -347,6 +452,19 @@ int main()
 	high_scores2.setString("High Scores");
 	high_scores1.setPosition(hsc_posx + m_text_pos, hsc_posy + m_text_pos);
 	high_scores2.setPosition(hsc_posx, hsc_posy);
+
+	//----- Exit -----
+	int e_posx = 522,
+		e_posy = m_posy + gap * 6;
+	Text exitm = menu_text;
+	exitm.setString("Exit");
+	exitm.setPosition(e_posx, e_posy);
+	Text exitm1 = menu_text1;
+	Text exitm2 = menu_text2;
+	exitm1.setString("Exit");
+	exitm2.setString("Exit");
+	exitm1.setPosition(e_posx + m_text_pos, e_posy + m_text_pos);
+	exitm2.setPosition(e_posx, e_posy);
 
 
 
@@ -462,6 +580,59 @@ int main()
 	Text offtxt2_1 = offtxt;
 	offtxt2_1.setPosition(ontxt2_1.getPosition().x + offgap, statetxt2.getPosition().y);
 
+
+	//												   //
+	//------------------ Themes Texts -----------------//
+	//												   //
+	//												   //
+	/////////////////////////////////////////////////////
+
+	// Heading Themes Text
+	int themes_posx = 380,
+		themes_posy = 50;
+	Text Themes1 = menu1;
+	Text Themes2 = menu2;
+	Themes1.setString("Themes");
+	Themes2.setString("Themes");
+	Themes1.setPosition(themes_posx + heading_pos, themes_posy + heading_pos);
+	Themes2.setPosition(themes_posx, themes_posy);
+
+	// Initializing Themes Images.
+	float thSizeFactor = 0.45, newscale=0.53;
+	int thpic_x = 94, thpic_y = 225, thpic_gap = 570;
+	Texture theme1Texture;
+	Sprite theme1Sprite, theme1BigSprite;
+	theme1Texture.loadFromFile("Textures/theme1.png");
+	theme1Sprite.setTexture(theme1Texture);
+	theme1Sprite.setPosition(thpic_x, thpic_y);
+	theme1Sprite.setScale(thSizeFactor, thSizeFactor);
+	theme1BigSprite = theme1Sprite;
+	theme1BigSprite.setScale(newscale, newscale);
+	theme1BigSprite.setPosition(thpic_x - 42, thpic_y - 42);
+
+	Texture theme2Texture;
+	Sprite theme2Sprite, theme2BigSprite;
+	theme2Texture.loadFromFile("Textures/theme2.png");
+	theme2Sprite.setTexture(theme2Texture);
+	theme2Sprite.setPosition(thpic_x + thpic_gap, thpic_y);
+	theme2Sprite.setScale(thSizeFactor, thSizeFactor);
+	theme2BigSprite = theme2Sprite;
+	theme2BigSprite.setScale(newscale, newscale);
+	theme2BigSprite.setPosition(thpic_x + thpic_gap - 42, thpic_y - 42);
+
+	// Initializing themes Texts
+	Text theme1txt = menu_text,
+		theme2txt = menu_text;
+	int thtxt_x = 200, thtxt_y = 748, thtxt_gap = 583;
+	theme1txt.setString("Theme 1");
+	theme2txt.setString("Theme 2");
+	theme1txt.setCharacterSize(40);
+	theme2txt.setCharacterSize(40);
+	theme1txt.setPosition(thtxt_x, thtxt_y);
+	theme2txt.setPosition(thtxt_x + thtxt_gap, thtxt_y);
+
+
+
 	//													//
 	//---------------- Instruction Texts ---------------//
 	//													//
@@ -478,54 +649,31 @@ int main()
 	Instructions2.setPosition(Instruc_posx, Instruc_posy);
 
 	int i_posx = 45,
-		i_posy = 200,
-		i_gap = 55,
-		i_size = 35;
+		i_posy = 185,
+		i_gap = 55;
+	float i_size = 34.9;
 	Text i_para = menu_text;
 	i_para.setCharacterSize(i_size);
 
-	Text i_l1 = i_para;
-	i_l1.setString("Centipede is a classic arcade game");
-	i_l1.setPosition(i_posx, i_posy + i_gap * 0);
-	Text i_l2 = i_para;
-	i_l2.setString("where your mission is to destroy the");
-	i_l2.setPosition(i_posx, i_posy + i_gap * 1);
-	Text i_l3 = i_para;
-	i_l3.setString("descending centipede. Use the");
-	i_l3.setPosition(i_posx, i_posy + i_gap * 2);
-	Text i_l4 = i_para;
-	i_l4.setString("keyboard to navigate and shoot to");
-	i_l4.setPosition(i_posx, i_posy + i_gap * 3);
-	Text i_l5 = i_para;
-	i_l5.setString("break it into smaller segments.");
-	i_l5.setPosition(i_posx, i_posy + i_gap * 4);
-	Text i_l6 = i_para;
-	i_l6.setString("Watch out for spiders, fleas, and");
-	i_l6.setPosition(i_posx, i_posy + i_gap * 5);
-	Text i_l7 = i_para;
-	i_l7.setString("scorpions. The game gets");
-	i_l7.setPosition(i_posx, i_posy + i_gap * 6);
-	Text i_l8 = i_para;
-	i_l8.setString("progressively challenging with new");
-	i_l8.setPosition(i_posx, i_posy + i_gap * 7);
-	Text i_l9 = i_para;
-	i_l9.setString("enemies. Master precision shooting");
-	i_l9.setPosition(i_posx, i_posy + i_gap * 8);
-	Text i_l10 = i_para;
-	i_l10.setString("and agile dodging for the highest");
-	i_l10.setPosition(i_posx, i_posy + i_gap * 9);
-	Text i_l11 = i_para;
-	i_l11.setString("score in this timeless classic.");
-	i_l11.setPosition(i_posx, i_posy + i_gap * 10);
-	float aa = 1.3;
-	Text i_l12 = i_para;
-	i_l12.setString("Press Enter to continue...");
-	i_l12.setPosition(i_posx - aa, i_posy + i_gap * 12 + 5 - aa);
-	Text i_l13 = i_para;
-	i_l13.setString("Press Enter to continue...");
-	i_l13.setPosition(i_posx, i_posy + i_gap * 12 + 5);
-	//i_l13.setOutlineColor(Color::Black);
-	//i_l13.setOutlineThickness(2.0f);
+	string instruction_lines =
+		"1. Destroy the centipede or train to\n"
+		"     earn points\n"
+		"2. Head: 20 pts, Body: 10 pts\n"
+		"3. Destroying a mushroom gives\n"
+		"     1 point\n"
+		"4. The player can shoot one bullet\n"
+		"     at a time\n"
+		"5. A mushroom appears when an enemy\n"
+		"     is destroyed\n"
+		"6. If destroyed in the player area,\n"
+		"     a poisonous mushroom appears\n"
+		"7. Avoid contact with enemies and \n"
+		"     poisonous mushrooms\n"
+		"8. Survive as long as possible to \n"
+		"     get a high score!\n";
+
+	i_para.setString(instruction_lines);
+	i_para.setPosition(i_posx, i_posy);
 
 	//													//
 	//----------------- Controls Texts -----------------//
@@ -560,9 +708,6 @@ int main()
 	keyboard_sprite2.setPosition(30, 250);
 	keyboard_sprite2.setScale(0.63, 0.63);
 
-	Text controlsdef = i_l12;
-	controlsdef.setCharacterSize(30);
-	controlsdef.setPosition(45, 885);
 
 	//													  //
 	//----------------- Highscores Texts -----------------//
@@ -572,7 +717,8 @@ int main()
 
 	int hscore_posx = 200,
 		hscore_posy = 50;
-	//Initializing Control window texts
+
+	//Initializing highscore window texts
 	Text hscore1 = menu1;
 	Text hscore2 = menu2;
 	hscore1.setString("High Scores");
@@ -580,7 +726,53 @@ int main()
 	hscore1.setPosition(hscore_posx + heading_pos, hscore_posy + heading_pos);
 	hscore2.setPosition(hscore_posx, hscore_posy);
 
+	Text indexHS_text = i_para,
+		 nameHS_text = i_para,
+		 levelHS_text = i_para,
+		 scoreHS_text = i_para;
 
+	Text headingHS1 = menu1,
+		 headingHS2 = menu2;
+	headingHS1.setCharacterSize(38);
+	headingHS2.setCharacterSize(38);
+
+	Text nameHS1 = headingHS1, nameHS2 = headingHS2,
+		levelHS1 = headingHS1, levelHS2 = headingHS2,
+		scoreHS1 = headingHS1, scoreHS2 = headingHS2;
+
+	
+
+	int indexHS_posx = 48,
+		indexHS_posy = 280;
+	indexHS_text.setPosition(indexHS_posx, indexHS_posy);
+
+	int nameHS_posx = 151;
+	nameHS_text.setPosition(nameHS_posx, indexHS_posy);
+
+	int levelHS_posx = 742;
+	levelHS_text.setPosition(levelHS_posx, indexHS_posy);
+
+	int scoreHS_posx = 993;
+	scoreHS_text.setPosition(scoreHS_posx, indexHS_posy);
+
+
+	int headingHS_posy = 215, hs3Dgap = 2;
+	nameHS1.setString("Name");
+	nameHS2.setString("Name");
+	nameHS1.setPosition(nameHS_posx + hs3Dgap, headingHS_posy + hs3Dgap);
+	nameHS2.setPosition(nameHS_posx, headingHS_posy);
+
+	levelHS1.setString("Level");
+	levelHS2.setString("Level");
+	levelHS1.setPosition(levelHS_posx + hs3Dgap, headingHS_posy + hs3Dgap);
+	levelHS2.setPosition(levelHS_posx, headingHS_posy);
+
+	scoreHS1.setString("Score");
+	scoreHS2.setString("Score");
+	scoreHS1.setPosition(scoreHS_posx + hs3Dgap, headingHS_posy + hs3Dgap);
+	scoreHS2.setPosition(scoreHS_posx, headingHS_posy);
+
+	vector<Text> headingHStxt = { nameHS1, nameHS2, levelHS1, levelHS2, scoreHS1, scoreHS2 };
 
 
 	//												 //
@@ -612,6 +804,11 @@ int main()
 	resume2.setString("Resume");
 	resume1.setPosition(resume_posx + m_text_pos, resume_posy + m_text_pos);
 	resume2.setPosition(resume_posx, resume_posy);
+
+	Text mresume = resume, mresume1 = resume1, mresume2 = resume2;
+	mresume.setPosition(resume_posx, start_posy);
+	mresume1.setPosition(resume_posx, start_posy + m_text_pos);
+	mresume2.setPosition(resume_posx, start_posy);
 
 	//----- P Settings -----
 	set_posx = 419;
@@ -771,6 +968,8 @@ int main()
 	notxt.setOutlineColor(Color::Red);
 	notxt.setPosition(yestxt.getPosition().x + exitgap, exit_posy + exit_posygap);
 
+
+
 	recgap = 3;
 	recspace = 25;
 	RectangleShape exitrectangle1(Vector2f(1120, 195));
@@ -804,10 +1003,9 @@ int main()
 
 	// Initializing Background Music 2.
 	sf::Music bgMusic2;
-	bgMusic2.openFromFile("Music/Retro_Post_Punk.ogg");
+	bgMusic2.openFromFile("Music/Lalalatte.ogg");
 	bgMusic2.setLoop(true);
 	bgMusic2.setVolume(music_vol);
-
 
 
 	///////////////////////////////////////////////////////////////
@@ -819,21 +1017,21 @@ int main()
 
 	//Initializing player dying sound.
 	SoundBuffer die_buffer;
-	die_buffer.loadFromFile("Sound_Effects/death2.wav");
+	die_buffer.loadFromFile("Sound_Effects/death1.wav");
 	Sound playerdie_sound;
 	playerdie_sound.setBuffer(die_buffer);
 	playerdie_sound.setVolume(70);
 
 	//Initializing killing sound.
 	SoundBuffer kill_buffer;
-	kill_buffer.loadFromFile("Sound_Effects/kill2.wav");
+	kill_buffer.loadFromFile("Sound_Effects/kill1.wav");
 	Sound kill_sound;
 	kill_sound.setBuffer(kill_buffer);
 	kill_sound.setVolume(70);
 
 	//Initializing destroying sound.
 	SoundBuffer destroy_buffer;
-	destroy_buffer.loadFromFile("Sound_Effects/destroy2.wav");
+	destroy_buffer.loadFromFile("Sound_Effects/destroy1.wav");
 	Sound destroy_sound;
 	destroy_sound.setBuffer(destroy_buffer);
 	destroy_sound.setVolume(70);
@@ -847,7 +1045,7 @@ int main()
 
 	// Initializing Fire Sound.
 	SoundBuffer fire_buffer;
-	fire_buffer.loadFromFile("Sound_Effects/fire3.wav");
+	fire_buffer.loadFromFile("Sound_Effects/fire1.wav");
 	Sound fire_sound;
 	fire_sound.setBuffer(fire_buffer);
 	fire_sound.setVolume(sound_vol);
@@ -865,6 +1063,35 @@ int main()
 	Sound hover_sound;
 	hover_sound.setBuffer(hover_buffer);
 	hover_sound.setVolume(sound_vol);
+
+	// TYPING SOUNDS //
+	// Key Typing sound
+	SoundBuffer key_typing_buffer;
+	key_typing_buffer.loadFromFile("Sound_Effects/key_type.wav");
+	Sound keyTyping_sound;
+	keyTyping_sound.setBuffer(key_typing_buffer);
+	keyTyping_sound.setVolume(sound_vol);
+
+	// Space Typing sound
+	SoundBuffer space_typing_buffer;
+	space_typing_buffer.loadFromFile("Sound_Effects/space_type.wav");
+	Sound spaceTyping_sound;
+	spaceTyping_sound.setBuffer(space_typing_buffer);
+	spaceTyping_sound.setVolume(sound_vol);
+
+	// Backspace Typing sound
+	SoundBuffer backspace_typing_buffer;
+	backspace_typing_buffer.loadFromFile("Sound_Effects/backspace_type.wav");
+	Sound backspaceTyping_sound;
+	backspaceTyping_sound.setBuffer(backspace_typing_buffer);
+	backspaceTyping_sound.setVolume(sound_vol);
+
+	// Error Typing sound
+	SoundBuffer error_typing_buffer;
+	error_typing_buffer.loadFromFile("Sound_Effects/type_error.wav");
+	Sound errorTyping_sound;
+	errorTyping_sound.setBuffer(error_typing_buffer);
+	errorTyping_sound.setVolume(sound_vol);
 
 
 	////////////////////////////////////////////////////////////////////
@@ -884,7 +1111,6 @@ int main()
 	// Initializing Background Game Screen level 1.
 	Texture background1_lvl1Texture;
 	Sprite background1_lvl1;
-	//background1_lvl1Texture.loadFromFile("Textures/bg2_1level1.png");
 	background1_lvl1Texture.loadFromFile("Textures/bg1level1.png");
 	background1_lvl1.setTexture(background1_lvl1Texture);
 	background1_lvl1.setColor(sf::Color(255, 255, 255, 255 * 0.35)); // Reduces Opacity to 30%
@@ -892,14 +1118,14 @@ int main()
 	// Initializing Background Game Screen level 1.
 	Texture background2_lvl1Texture;
 	Sprite background2_lvl1;
-	//background2_lvl1Texture.loadFromFile("Textures/bg2_2level1.png");
+	background2_lvl1Texture.loadFromFile("Textures/null.png");
 	background2_lvl1.setTexture(background2_lvl1Texture);
 	background2_lvl1.setColor(sf::Color(255, 255, 255, 255 * 0.50)); // Reduces Opacity to 30%
 
 	// Initializing Background Game Screen level 1.
 	Texture background3_lvl1Texture;
 	Sprite background3_lvl1;
-	//background3_lvl1Texture.loadFromFile("Textures/bg2_3level1.png");
+	background2_lvl1Texture.loadFromFile("Textures/null.png");
 	background3_lvl1.setTexture(background3_lvl1Texture);
 	background3_lvl1.setColor(sf::Color(255, 255, 255, 255 * 0.80)); // Reduces Opacity to 30%
 
@@ -909,13 +1135,6 @@ int main()
 	background_extTexture.loadFromFile("Textures/bg_ext.png");
 	background_ext.setTexture(background_extTexture);
 	background_ext.setColor(sf::Color(255, 255, 255, 255 * 0.80)); // Reduces Opacity to 90%
-
-	// Initializing ...
-	sf::Texture background_hsTexture;
-	sf::Sprite background_hs;
-	background_hsTexture.loadFromFile("Textures/highscores.png");
-	background_hs.setTexture(background_hsTexture);
-	//background_hs.setColor(sf::Color(255, 255, 255, 0.100)); // Reduces Opacity to 90%
 
 
 	////////////////////////////////////////////////////////////////
@@ -927,7 +1146,6 @@ int main()
 
 
 	// Initializing Heart Sprite.
-	int heartscale = 0.8;
 	Texture heartTexture;
 	Sprite heartSprite;
 	heartTexture.loadFromFile("Textures/heart.png");
@@ -944,7 +1162,7 @@ int main()
 	sf::Clock bulletClock;
 	sf::Texture bulletTexture;
 	sf::Sprite bulletSprite;
-	bulletTexture.loadFromFile("Textures/bullet2.png");
+	bulletTexture.loadFromFile("Textures/bullet3.png");
 	bulletSprite.setTexture(bulletTexture);
 	bulletSprite.setTextureRect(sf::IntRect(0, 0, boxPixelsX, boxPixelsY));
 
@@ -965,12 +1183,16 @@ int main()
 	poisonousmushroomSprite1.setTextureRect(IntRect(64, 32, boxPixelsX, boxPixelsY));
 
 	// Initializing Centipede Sprites:
+	int c1 = 250,
+		c2 = 235,
+		c3 = 250;
 	//Centipede head sprite(left):
 	Texture centipedeheadleftTexture;
 	centipedeheadleftTexture.loadFromFile("Textures/c_head_left_walk.png");
 	Sprite centipedeheadleftSprite;
 	centipedeheadleftSprite.setTexture(centipedeheadleftTexture);
 	centipedeheadleftSprite.setTextureRect(IntRect(0, 0, boxPixelsX - 4, boxPixelsY));
+	centipedeheadleftSprite.setColor(sf::Color(c1, c2, c3));
 
 	//Centipede body sprite(left):
 	Texture centipedeleftTexture;
@@ -978,6 +1200,7 @@ int main()
 	Sprite centipedeleftSprite;
 	centipedeleftSprite.setTexture(centipedeleftTexture);
 	centipedeleftSprite.setTextureRect(IntRect(0, 0, boxPixelsX - 4, boxPixelsY));
+	centipedeleftSprite.setColor(sf::Color(c1, c2, c3));
 
 	//Centipede head sprite(right):
 	Texture centipedeheadrightTexture;
@@ -985,6 +1208,7 @@ int main()
 	Sprite centipedeheadrightSprite;
 	centipedeheadrightSprite.setTexture(centipedeheadrightTexture);
 	centipedeheadrightSprite.setTextureRect(IntRect(0, 0, boxPixelsX - 4, boxPixelsY));
+	centipedeheadrightSprite.setColor(sf::Color(c1, c2, c3));
 
 	//Centipede body sprite(right):
 	Texture centipederightTexture;
@@ -992,6 +1216,7 @@ int main()
 	Sprite centipederightSprite;
 	centipederightSprite.setTexture(centipederightTexture);
 	centipederightSprite.setTextureRect(IntRect(0, 0, boxPixelsX - 4, boxPixelsY));
+	centipederightSprite.setColor(sf::Color(c1, c2, c3));
 
 
 	/////////////////////////////////////////////////////////////////////////////////////
@@ -1059,38 +1284,75 @@ int main()
 				{
 					//Name input
 					char ch;
+					bool isError = 0;
 					if (Keyboard::isKeyPressed(Keyboard::BackSpace) && name.length() > 0)
+					{
+						backspaceTyping_sound.play();
 						name.pop_back();
-					if (name.length() < maxnamelen)
+					}
+					else if (name.length() < maxnamelen)
 					{
 						if (e.key.code == Keyboard::Space)
+						{
+							spaceTyping_sound.play();
 							name += ' ';
+						}
 						else if (e.key.code == Keyboard::Hyphen && e.key.shift)
+						{
+							keyTyping_sound.play();
 							name += '_';
+						}
 						else if (e.key.code == Keyboard::Hyphen)
+						{
+							keyTyping_sound.play();
 							name += '-';
+						}
 						else if (e.key.code == Keyboard::Period)
+						{
+							keyTyping_sound.play();
 							name += '.';
+						}
 						else if (e.key.code >= Keyboard::A && e.key.code <= Keyboard::Z)
 						{
+							keyTyping_sound.play();
 							if (e.key.shift)
 								ch = e.text.unicode + 'A';
 							else
 								ch = e.text.unicode + 'a';
 							name += ch;
 						}
+						else if (e.key.code >= Keyboard::Num0 && e.key.code <= Keyboard::Num9)
+						{
+							if (e.key.shift)
+								isError = 1;
+							else
+							{
+								keyTyping_sound.play();
+								ch = e.text.unicode + 22;
+								name += ch;
+							}
+						}
+						else if (e.key.code == Keyboard::LShift || e.key.code == Keyboard::RShift)
+						{
+
+						}
+						else
+							isError = 1;
 					}
 					if (e.key.code == Keyboard::Enter && name.length() > 0)
 					{
 						windows = 2;
 						click_sound.play();
+						isError = 0;
 					}
+					if (isError)
+						errorTyping_sound.play();
 				}
 				else if (windows == 2)
 				{
 					if (e.key.code == Keyboard::Down)
 					{
-						if (menu_pt < 5)
+						if (menu_pt < 7)
 							++menu_pt;
 						else
 							menu_pt = 1;
@@ -1102,7 +1364,7 @@ int main()
 						if (menu_pt > 1)
 							--menu_pt;
 						else
-							menu_pt = 5;
+							menu_pt = 7;
 						hover_sound.play();
 					}
 
@@ -1114,14 +1376,18 @@ int main()
 							bgMusic2.play();
 							windows = 7;
 						}
-						if (menu_pt == 2)
+						else if (menu_pt == 2)
 							windows = 3;
-						if (menu_pt == 3)
+						else if (menu_pt == 3)
+							windows = 12;
+						else if (menu_pt == 4)
 							windows = 4;
-						if (menu_pt == 4)
+						else if (menu_pt == 5)
 							windows = 5;
-						if (menu_pt == 5)
+						else if (menu_pt == 6)
 							windows = 6;
+						else //if (menu_pt == 7)
+							windows = 11;
 						click_sound.play();
 					}
 				}
@@ -1350,7 +1616,7 @@ int main()
 						if (isMainmenu)
 							windows = 2;
 						else if (game_over || game_won || exit_pt)
-							windows=11;       //return 0;
+							windows = 11;       //return 0;
 						else
 							windows = 8;
 						click_sound.play();
@@ -1409,7 +1675,10 @@ int main()
 						if (pause_pt == 5)
 							windows = 2;
 						if (pause_pt == 6)
-							windows=11;       //return 0;
+						{
+							windows = 9;       //return 0;
+							exit_pt = true;
+						}
 					}
 				}
 				else if (windows == 9)	//End game screen
@@ -1417,6 +1686,22 @@ int main()
 					if (e.key.code == Keyboard::Enter)
 					{
 						windows = 6;
+
+						// Updating Highscores
+						if (name != "" && !(score <= 0 && lives == 3))
+						{
+							players.emplace_back(name, level, score, lives);
+
+							sortedplayers.clear();
+							for (int i = 0; i < players.size(); ++i)
+								sortedplayers.push_back(&players[i]);
+
+							sortplayers(sortedplayers);
+							//copyFile(filename, copyfilename);
+							updateCSV(filename, sortedplayers);
+							cout << "\nData Updated...\n";
+						}
+						
 						click_sound.play();
 					}
 				}
@@ -1453,6 +1738,95 @@ int main()
 						}
 					}
 				}
+				else if (windows == 12)		// Theme changing controls
+				{
+					if (e.key.code == Keyboard::Up)
+					{
+						themes_pt = 1;
+						hover_sound.play();
+					}
+					else if (e.key.code == Keyboard::Down)
+					{
+						themes_pt = 3;
+						hover_sound.play();
+					}
+					else if (e.key.code == Keyboard::Left)
+					{
+						if (themes_pt == 2)
+						{
+							themes_pt = 1;
+							hover_sound.play();
+						}
+					}
+					else if (e.key.code == Keyboard::Right)
+					{
+						if (themes_pt == 1)
+						{
+							themes_pt = 2;
+							hover_sound.play();
+						}
+					}
+					else if (e.key.code == Keyboard::Enter)
+					{
+						click_sound.play();
+						if (themes_pt == 1)
+						{
+							//Music
+							bgMusic2.openFromFile("Music/Lalalatte.ogg");
+
+							//Sounds
+							die_buffer.loadFromFile("Sound_Effects/death1.wav");
+							kill_buffer.loadFromFile("Sound_Effects/kill1.wav");
+							destroy_buffer.loadFromFile("Sound_Effects/destroy1.wav");
+							fire_buffer.loadFromFile("Sound_Effects/fire1.wav");
+
+							//Background
+							background_homeTexture.loadFromFile("Textures/grass.png");
+							background1_lvl1Texture.loadFromFile("Textures/bg1level1.png");
+							background2_lvl1Texture.loadFromFile("Textures/null.png");
+							background3_lvl1Texture.loadFromFile("Textures/null.png");
+
+							//Sprites
+							playerTexture.loadFromFile("Textures/player1.png");
+							bulletTexture.loadFromFile("Textures/bullet3.png");
+							mushroomTexture.loadFromFile("Textures/obstacle1.png");
+							centipedeheadleftTexture.loadFromFile("Textures/c_head_left_walk.png");
+							centipedeleftTexture.loadFromFile("Textures/c_body_left_walk.png");
+							centipedeheadrightTexture.loadFromFile("Textures/c_head_right_walk.png");
+							centipederightTexture.loadFromFile("Textures/c_body_right_walk.png");
+						}
+						else if (themes_pt == 2)
+						{
+							//Music
+							bgMusic2.openFromFile("Music/Retro_Post_Punk.ogg");
+
+							//Sounds
+							die_buffer.loadFromFile("Sound_Effects/death3.wav");
+							kill_buffer.loadFromFile("Sound_Effects/kill2.wav");
+							destroy_buffer.loadFromFile("Sound_Effects/destroy2.wav");
+							fire_buffer.loadFromFile("Sound_Effects/fire2.wav");
+
+							//Background
+							background_homeTexture.loadFromFile("Textures/spaceshooter.png");
+							background1_lvl1Texture.loadFromFile("Textures/bg2_1level1.png");
+							background2_lvl1Texture.loadFromFile("Textures/bg2_2level1.png");
+							background3_lvl1Texture.loadFromFile("Textures/bg2_3level1.png");
+
+							//Sprites
+							playerTexture.loadFromFile("Textures/player6.png");
+							bulletTexture.loadFromFile("Textures/bullet2.png");
+							mushroomTexture.loadFromFile("Textures/obstacle2.png");
+							centipedeheadleftTexture.loadFromFile("Textures/train_engine_left.png");
+							centipedeleftTexture.loadFromFile("Textures/train_carraige_left.png");
+							centipedeheadrightTexture.loadFromFile("Textures/train_engine_right.png");
+							centipederightTexture.loadFromFile("Textures/train_carraige_right.png");
+						}
+						else
+						{
+							windows = 2;
+						}
+					}
+				}
 			}
 		}
 		//////////////////////////////////////
@@ -1474,6 +1848,8 @@ int main()
 			window.draw(strectangle2);
 			window.draw(entername_text);
 			window.draw(stnamestr);
+
+			window.draw(credits);
 		}
 		////////////////  Main Menu  ////////////////
 		else if (windows == 2)	
@@ -1482,11 +1858,24 @@ int main()
 			window.draw(menu2);
 			if (menu_pt == 1)
 			{
-				window.draw(start1);
-				window.draw(start2);
+				if (gamestarted == false)
+				{
+					window.draw(start1);
+					window.draw(start2);
+				}
+				else
+				{
+					window.draw(mresume1);
+					window.draw(mresume2);
+				}
 			}
 			else
-				window.draw(start);
+			{
+				if (gamestarted == false)
+					window.draw(start);
+				else
+					window.draw(mresume);
+			}
 
 			if (menu_pt == 2)
 			{
@@ -1498,13 +1887,21 @@ int main()
 
 			if (menu_pt == 3)
 			{
+				window.draw(themes1);
+				window.draw(themes2);
+			}
+			else
+				window.draw(themes);
+
+			if (menu_pt == 4)
+			{
 				window.draw(instructions1);
 				window.draw(instructions2);
 			}
 			else
 				window.draw(instructions);
 
-			if (menu_pt == 4)
+			if (menu_pt == 5)
 			{
 				window.draw(controls1);
 				window.draw(controls2);
@@ -1512,13 +1909,21 @@ int main()
 			else
 				window.draw(controls);
 
-			if (menu_pt == 5)
+			if (menu_pt == 6)
 			{
 				window.draw(high_scores1);
 				window.draw(high_scores2);
 			}
 			else
 				window.draw(high_scores);
+
+			if (menu_pt == 7)
+			{
+				window.draw(exitm1);
+				window.draw(exitm2);
+			}
+			else
+				window.draw(exitm);
 		}
 		////////////////  Settings window  ////////////////
 		else if (windows == 3)
@@ -1575,24 +1980,38 @@ int main()
 				window.draw(backtxt);
 		}
 
+		////////////////  Themes window  ////////////////
+		else if (windows == 12)
+		{
+			window.draw(Themes1);
+			window.draw(Themes2);
+			if (themes_pt == 1)
+				window.draw(theme1BigSprite);
+			else
+			window.draw(theme1Sprite);
+
+			if (themes_pt == 2)
+				window.draw(theme2BigSprite);
+			else
+				window.draw(theme2Sprite);
+			window.draw(theme1txt);
+			window.draw(theme2txt);
+
+			if (themes_pt == 3)
+			{
+				window.draw(backtxt1);
+				window.draw(backtxt2);
+			}
+			else
+				window.draw(backtxt);
+		}
+
 		////////////////  Instructions window  ////////////////
 		else if (windows == 4)
 		{
 			window.draw(Instructions1);
 			window.draw(Instructions2);
-			window.draw(i_l1);
-			window.draw(i_l2);
-			window.draw(i_l3);
-			window.draw(i_l4);
-			window.draw(i_l5);
-			window.draw(i_l6);
-			window.draw(i_l7);
-			window.draw(i_l8);
-			window.draw(i_l9);
-			window.draw(i_l10);
-			window.draw(i_l11);
-			//window.draw(i_l12);
-			//window.draw(i_l13);
+			window.draw(i_para);
 			window.draw(backtxt1);
 			window.draw(backtxt2);
 		}
@@ -1605,7 +2024,6 @@ int main()
 			window.draw(keyboard_sprite1);
 			window.draw(keyboard_sprite2);
 
-			//window.draw(controlsdef);
 			window.draw(backtxt1);
 			window.draw(backtxt2);
 		}
@@ -1615,10 +2033,9 @@ int main()
 			window.draw(hscore1);
 			window.draw(hscore2);
 
-			window.draw(background_hs);
-			/////////////////////////////// #note: scores to be printed
+			displayHighscores(sortedplayers, indexHS_text, nameHS_text, levelHS_text, scoreHS_text, headingHStxt, window);
 
-			if (game_over || game_won)
+			if (game_over || game_won || exit_pt)
 			{
 				window.draw(pressentertxt);
 			}
@@ -1734,7 +2151,7 @@ int main()
 		}
 		////////////////  Heap Clearing window  ////////////////
 		else if (windows == 11)
-		{
+		{	
 			///////////////////////////////// clear heap
 			/*delete[] Up;
 			delete[] Down;
@@ -1753,6 +2170,7 @@ int main()
 		else if (windows == 7)
 		{
 			isMainmenu = 0;
+			gamestarted = 1;
 			window.draw(background1_lvl1);
 			window.draw(background2_lvl1);
 			window.draw(background3_lvl1);
@@ -1762,6 +2180,7 @@ int main()
 			{
 				--lives;		//Player lives decreases by one
 				playerdie_sound.play();
+				shipex_cycles = 0;
 				deductlife = 0;
 				if (lives > 0)
 				{
@@ -1805,15 +2224,19 @@ int main()
 				centipede_gone = 0;
 				++level;
 				levels_text.setString("Level: " + to_string(level));
-				centipede_length += 2;
+				if (centipede_length <= 24)		//Max Length should be 26
+					centipede_length += 2;
 				minmushrooms += 5;
 				centipede_speed += 0.2;
+				bullet_speed += 0.02;
 				initializePCM(player, bullet, mushrooms, minmushrooms, nummushrooms, totalmushrooms, indexnum, centipedesize, head, centipede, mushroomSprite1, mushroomSprite2, poisonousmushroomSprite1, poisonousmushroomSprite2);
 			}
 
 			if (player[exists])
 			{
 				drawPlayer(window, player, playerSprite);
+				if (shipex_cycles < shipex_total)
+					draw_shipexplosion(window, shipex_sprites, shipex_clock, shipex_cycles, shipex_total, player[x] - 14, player[y] - 10);
 			}
 
 			// Spawning mushrooms:
@@ -1906,13 +2329,31 @@ int main()
 		window.display();
 		window.clear();
 	}
+	cout << "\nData Updated...\n";
+
+	return 0;
 }
+
+
 
 ////////////////////////////////////////////////////////////////////////////
 //                                                                        //
 // Write your functions definitions here. Some have been written for you. //
 //                                                                        //
 ////////////////////////////////////////////////////////////////////////////
+
+void updateCSV(string filename, vector<Player*> players)
+{
+	fstream file(filename, ios::out);
+	string line = "Index,Name,Level,Score,Lives\n";
+	file << line;
+	for (int i = 0; i < players.size() && i < 10; ++i)
+	{
+		line = to_string(i + 1) + "," + players[i]->name + "," + to_string(players[i]->level) + "," + to_string(players[i]->score) + "," + to_string(players[i]->lives);
+		file << line << endl;
+	}
+	file.close();
+}
 
 void cleararrays(float player[], float bullet[], int mushrooms[][4], int& minmushrooms, const int indexnum, const int centipedesize, float**& centipede, bool domushroom, bool docentipede, bool doplayer)
 {
@@ -2044,7 +2485,7 @@ void initializePCM(float player[], float bullet[], int mushrooms[][4], int& minm
 		centipede[i][exists] = 1;
 	}
 
-	centipede[0][x] = ((rand() % 19) + 1) * 32;	//Centipede head position on columns
+	centipede[0][x] = ((rand() % 6) + 1) * 32;	//Centipede head position on columns
 	centipede[0][y] = 0 * 32;	//Centipede head position on first row
 
 	for (int i = 1; i < centipede_length; ++i)		//Setting centipede body positions
@@ -2552,5 +2993,108 @@ void lives_draw(RenderWindow& window, int lives, Text lives_text, Sprite& heartS
 		heartSprite.setPosition(x, y);
 		window.draw(heartSprite);
 		x += 34;
+	}
+}
+
+void parseCSV(vector<Player>& players, string filename)
+{
+	ifstream file(filename);
+
+	string line, word;
+	getline(file, line);		//Discard header
+
+	int i = 0;
+	while (getline(file, line))
+	{
+		stringstream ss(line);		//To read each word by splitting string with ','
+		vector <string> row;
+
+		while (getline(ss, word, ','))
+			row.push_back(word);
+
+		if (row.size() == 5)
+		{
+			players.emplace_back(row[1], stoi(row[2]), stoi(row[3]), stoi(row[4]));
+			Player::size++;
+		}
+	}
+}
+
+void sortplayers(vector<Player*>& vec)
+{
+	int n = vec.size();
+
+	bool swap;
+	for (int i = 0; i < n; ++i)
+	{
+		swap = 0;
+		for (int j = 0; j < n - i - 1; ++j)
+		{
+			if (vec[j]->score < vec[j + 1]->score)
+			{
+				Player* temp = vec[j];
+				vec[j] = vec[j + 1];
+				vec[j + 1] = temp;
+				swap = 1;
+			}
+		}
+		if (!swap)
+			break;
+	}
+}
+
+void displayHighscores(vector<Player*> players, Text& index, Text& name, Text& level, Text& score, vector<Text> headings, RenderWindow& window)
+{
+	string ind="", n="", lvl="", sc="";
+	for (int i = 0; i < players.size() && i < 10; ++i)
+	{
+		ind += to_string(i + 1) + ".\n";
+		n += players[i]->name + "\n";
+		lvl += to_string(players[i]->level) + "\n";
+		sc += to_string(players[i]->score) + "\n";
+	}
+
+	index.setString(ind);
+	name.setString(n);
+	level.setString(lvl);
+	score.setString(sc);
+
+	for (int i = 0; i < headings.size(); ++i)
+		window.draw(headings[i]);
+
+	window.draw(index);
+	window.draw(name);
+	window.draw(level);
+	window.draw(score);
+}
+
+void copyFile(const string& sourcePath, const string& destPath) 
+{
+	ifstream source(sourcePath, ios::binary);
+	ofstream dest(destPath, ios::binary);
+
+	if (!source || !dest)
+	{
+		cerr << "Error opening files.\n";
+		return;
+	}
+	dest << source.rdbuf(); // Efficient way to copy entire contents
+}
+
+void draw_shipexplosion(RenderWindow& window, Sprite* sprites, Clock& clock, int& cycles, int& total, int x, int y)
+{
+	if (clock.getElapsedTime().asMilliseconds() > 75)
+	{
+		clock.restart();
+		++cycles;
+	}
+
+	//if (cycles >= total)
+	//	cycles = 0;
+
+	if (cycles < total)
+	{
+		sprites[cycles].setPosition(x, y);
+		window.draw(sprites[cycles]);
 	}
 }
