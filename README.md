@@ -8,13 +8,12 @@ This project is a recreation of the classic Atari Centipede game, developed as p
 - Make sure that you have linked SFML to the Visual Studio project.
 
 ## Features
-- This game includes all the basic features from the original centiped game.
+- This game includes all the basic features from the original centipede game.
 - Centipede's speed as well as number of total mushrooms increasing with each advancing level.
 - The game menu includes functionalities such as newgame, resume, instructions, controls, highscores, settings and exit game.
 
 ### Additional Features
-- Additional sprites are addes to add an aesthetic modern look.
-
+- Additional sprites are added to add an aesthetic modern look.
 - Space Themed sprites are available, giving space shooter vibes.
 
 ## Screenshots
