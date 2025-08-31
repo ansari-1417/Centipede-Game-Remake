@@ -10,7 +10,7 @@ This project is a recreation of the classic Atari Centipede game, developed as p
 ## Features
 - This game includes all the basic features from the original centipede game.
 - Centipede's speed as well as number of total mushrooms increasing with each advancing level.
-- The game menu includes functionalities such as newgame, resume, instructions, controls, highscores, settings and exit game.
+- The game menu includes functionalities such as newgame, resume, instructions, controls, highscores, settings, themes and exit game.
 
 ### Additional Features
 - Additional sprites are added to add an aesthetic modern look.
@@ -35,6 +35,9 @@ This project is a recreation of the classic Atari Centipede game, developed as p
 
 ### Settings Window
 ![Settings Window](https://github.com/user-attachments/assets/22b0ee50-9cc8-48cb-ad58-9c7a2f292ea8)
+
+### Themes Window
+![Themes Window](https://github.com/ansari-1417/Centipede-Game-Remake/blob/main/Screenshots/Themes%20Window.png)
 
 ### Pause Window
 ![Pause Menu](https://github.com/user-attachments/assets/00d2df45-e16d-4e8e-ada8-33a55d1e05f0)
