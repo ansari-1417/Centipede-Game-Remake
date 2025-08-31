@@ -19,34 +19,34 @@ This project is a recreation of the classic Atari Centipede game, developed as p
 ## Screenshots
 
 ### Starting Window
-![Starting Window](https://github.com/user-attachments/assets/a7b44759-c82a-4aba-aa55-8eff862af52d)
+![Starting Window](https://github.com/muhammad-moiz-ansari/Centipede-Game-Remake/blob/main/Screenshots/Starting%20Window.png)
 
 ### Main Menu
-![Main Menu](https://github.com/user-attachments/assets/63ce4917-abc2-4a18-8ca7-9160bc9d32de)
+![Main Menu](https://github.com/muhammad-moiz-ansari/Centipede-Game-Remake/blob/main/Screenshots/Main%20Menu.png)
 
 ### Instructions Window
-![Instructions Window](https://github.com/user-attachments/assets/427cff9a-5c94-4eaa-b252-3d1b0e48f615)
+![Instructions Window](https://github.com/muhammad-moiz-ansari/Centipede-Game-Remake/blob/main/Screenshots/Instructions%20Window.png)
 
 ### Controls Window
-![Controls Window](https://github.com/user-attachments/assets/6f0e34aa-2783-4081-9dd8-2533cbb2d9f7)
+![Controls Window](https://github.com/muhammad-moiz-ansari/Centipede-Game-Remake/blob/main/Screenshots/Controls%20Window.png)
 
 ### High Scores
-![Highscores Window](https://github.com/user-attachments/assets/41be30df-f082-4c5f-9a71-f159aba6b124)
+![Highscores Window](https://github.com/muhammad-moiz-ansari/Centipede-Game-Remake/blob/main/Screenshots/Highscores%20Window.png)
 
 ### Settings Window
-![Settings Window](https://github.com/user-attachments/assets/22b0ee50-9cc8-48cb-ad58-9c7a2f292ea8)
+![Settings Window](https://github.com/muhammad-moiz-ansari/Centipede-Game-Remake/blob/main/Screenshots/Settings%20Window.png)
 
 ### Themes Window
-![Themes Window](https://github.com/ansari-1417/Centipede-Game-Remake/blob/main/Screenshots/Themes%20Window.png)
+![Themes Window](https://github.com/muhammad-moiz-ansari/Centipede-Game-Remake/blob/main/Screenshots/Themes%20Window.png)
 
 ### Pause Window
-![Pause Menu](https://github.com/user-attachments/assets/00d2df45-e16d-4e8e-ada8-33a55d1e05f0)
+![Pause Menu](https://github.com/muhammad-moiz-ansari/Centipede-Game-Remake/blob/main/Screenshots/Pause%20Menu.png)
 
 ### Game Play
-![Gameplay](https://github.com/user-attachments/assets/b9eda11b-afaf-42e7-a8dc-4f5e1ec7fb31)
+![Gameplay](https://github.com/muhammad-moiz-ansari/Centipede-Game-Remake/blob/main/Screenshots/Gameplay.png)
 
 ### Exit Window
-![Exit Window](https://github.com/user-attachments/assets/67781b09-8767-4a58-a2ce-5deb9f3f6f45)
+![Exit Window](https://github.com/muhammad-moiz-ansari/Centipede-Game-Remake/blob/main/Screenshots/Exit%20Window.png)
 
 ### Player Stats Window
-![Player Stats Window](https://github.com/user-attachments/assets/40add446-867e-4df3-bf7c-21cbf11625bb)
+![Player Stats Window](https://github.com/muhammad-moiz-ansari/Centipede-Game-Remake/blob/main/Screenshots/PLayer%20Stats%20Window.png)
